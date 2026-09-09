@@ -16,6 +16,8 @@ class MyHomeOpenWebNetPlatform {
     config;
     api;
     accessories = [];
+    states = new Map();
+    commandInProgress = new Set();
     constructor(log, config, api) {
         this.log = log;
         this.config = config;
@@ -36,28 +38,46 @@ class MyHomeOpenWebNetPlatform {
             if (!accessory) {
                 accessory = new this.api.platformAccessory(light.name, uuid);
                 accessory.context.where = light.where;
+                accessory.context.on = false;
                 this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
                 this.log.info('Novo acessório criado: %s (%s)', light.name, light.where);
             }
             else {
                 this.log.info('Acessório existente restaurado: %s (%s)', light.name, light.where);
             }
+            const currentState = Boolean(accessory.context.on ?? false);
+            this.states.set(light.where, currentState);
             this.configureLightAccessory(accessory, light);
         }
     }
     configureLightAccessory(accessory, light) {
-        accessory.context.where = light.where;
         const service = accessory.getService(this.api.hap.Service.Lightbulb) ??
             accessory.addService(this.api.hap.Service.Lightbulb, light.name);
         service.setCharacteristic(this.api.hap.Characteristic.Name, light.name);
         service
             .getCharacteristic(this.api.hap.Characteristic.On)
+            .onGet(() => {
+            return this.states.get(light.where) ?? false;
+        })
             .onSet(async (value) => {
-            const on = Boolean(value);
-            this.log.info('%s: comando %s', light.name, on ? 'ON' : 'OFF');
+            const requestedState = Boolean(value);
+            const currentState = this.states.get(light.where);
+            if (currentState === requestedState) {
+                this.log.debug('%s: estado já é %s. Ignorando comando repetido.', light.name, requestedState ? 'ON' : 'OFF');
+                return;
+            }
+            if (this.commandInProgress.has(light.where)) {
+                this.log.debug('%s: comando já em andamento. Ignorando repetição.', light.name);
+                return;
+            }
+            this.commandInProgress.add(light.where);
+            this.log.info('%s: enviando comando %s', light.name, requestedState ? 'ON' : 'OFF');
             try {
-                await this.sendLightCommand(light.where, on);
-                accessory.context.on = on;
+                await this.sendLightCommand(light.where, requestedState);
+                this.states.set(light.where, requestedState);
+                accessory.context.on =
+                    requestedState;
+                this.log.info('%s: estado atualizado para %s', light.name, requestedState ? 'ON' : 'OFF');
             }
             catch (error) {
                 const message = error instanceof Error
@@ -66,11 +86,9 @@ class MyHomeOpenWebNetPlatform {
                 this.log.error('%s: erro ao enviar comando: %s', light.name, message);
                 throw error;
             }
-        });
-        service
-            .getCharacteristic(this.api.hap.Characteristic.On)
-            .onGet(() => {
-            return Boolean(accessory.context.on ?? false);
+            finally {
+                this.commandInProgress.delete(light.where);
+            }
         });
     }
     async sendLightCommand(where, on) {

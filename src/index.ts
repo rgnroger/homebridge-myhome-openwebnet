@@ -5,7 +5,6 @@ import {
   Logger,
   PlatformAccessory,
   PlatformConfig,
-  Service,
 } from 'homebridge';
 
 import { OpenWebNetClient } from './openwebnet.js';
@@ -32,6 +31,10 @@ const LIGHTS: MyHomeLight[] = [
 class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
 
   private readonly accessories: PlatformAccessory[] = [];
+
+  private readonly states = new Map<string, boolean>();
+
+  private readonly commandInProgress = new Set<string>();
 
   constructor(
     public readonly log: Logger,
@@ -74,6 +77,7 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
         );
 
         accessory.context.where = light.where;
+        accessory.context.on = false;
 
         this.api.registerPlatformAccessories(
           PLUGIN_NAME,
@@ -96,7 +100,18 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
         );
       }
 
-      this.configureLightAccessory(accessory, light);
+      const currentState =
+        Boolean(accessory.context.on ?? false);
+
+      this.states.set(
+        light.where,
+        currentState,
+      );
+
+      this.configureLightAccessory(
+        accessory,
+        light,
+      );
     }
   }
 
@@ -104,8 +119,6 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
     accessory: PlatformAccessory,
     light: MyHomeLight,
   ): void {
-
-    accessory.context.where = light.where;
 
     const service =
       accessory.getService(this.api.hap.Service.Lightbulb) ??
@@ -121,24 +134,65 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
 
     service
       .getCharacteristic(this.api.hap.Characteristic.On)
+      .onGet(() => {
+        return this.states.get(light.where) ?? false;
+      })
       .onSet(async (value: CharacteristicValue) => {
 
-        const on = Boolean(value);
+        const requestedState = Boolean(value);
+
+        const currentState =
+          this.states.get(light.where);
+
+        if (currentState === requestedState) {
+
+          this.log.debug(
+            '%s: estado já é %s. Ignorando comando repetido.',
+            light.name,
+            requestedState ? 'ON' : 'OFF',
+          );
+
+          return;
+        }
+
+        if (this.commandInProgress.has(light.where)) {
+
+          this.log.debug(
+            '%s: comando já em andamento. Ignorando repetição.',
+            light.name,
+          );
+
+          return;
+        }
+
+        this.commandInProgress.add(light.where);
 
         this.log.info(
-          '%s: comando %s',
+          '%s: enviando comando %s',
           light.name,
-          on ? 'ON' : 'OFF',
+          requestedState ? 'ON' : 'OFF',
         );
 
         try {
 
           await this.sendLightCommand(
             light.where,
-            on,
+            requestedState,
           );
 
-          accessory.context.on = on;
+          this.states.set(
+            light.where,
+            requestedState,
+          );
+
+          accessory.context.on =
+            requestedState;
+
+          this.log.info(
+            '%s: estado atualizado para %s',
+            light.name,
+            requestedState ? 'ON' : 'OFF',
+          );
 
         } catch (error) {
 
@@ -154,13 +208,13 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
           );
 
           throw error;
-        }
-      });
 
-    service
-      .getCharacteristic(this.api.hap.Characteristic.On)
-      .onGet(() => {
-        return Boolean(accessory.context.on ?? false);
+        } finally {
+
+          this.commandInProgress.delete(
+            light.where,
+          );
+        }
       });
   }
 
