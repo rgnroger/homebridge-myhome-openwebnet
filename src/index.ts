@@ -47,7 +47,6 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
       {
         host,
         port,
-        timeout: 5000,
       },
       (message) => this.log.info(message),
     );
@@ -61,7 +60,9 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
 
       await this.client.setLight('01', true);
 
-      this.log.info('Teste concluído: comando ON enviado para a luz 01.');
+      this.log.info(
+        'Teste concluído: comando ON enviado para a luz 01.',
+      );
 
     } catch (error) {
       const message =

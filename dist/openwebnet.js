@@ -18,17 +18,12 @@ export class OpenWebNetClient {
             });
             this.socket = socket;
             socket.setEncoding('utf8');
-            socket.setTimeout(this.options.timeout ?? 5000);
             socket.on('connect', () => {
                 this.log('Conexão TCP OpenWebNet estabelecida.');
                 resolve();
             });
             socket.on('data', (data) => {
                 this.handleData(data);
-            });
-            socket.on('timeout', () => {
-                this.log('Timeout na conexão OpenWebNet.');
-                socket.destroy();
             });
             socket.on('error', (error) => {
                 this.log(`Erro OpenWebNet: ${error.message}`);

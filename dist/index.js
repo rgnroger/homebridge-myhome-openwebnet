@@ -28,7 +28,6 @@ class MyHomeOpenWebNetPlatform {
         this.client = new OpenWebNetClient({
             host,
             port,
-            timeout: 5000,
         }, (message) => this.log.info(message));
         try {
             await this.client.connect();

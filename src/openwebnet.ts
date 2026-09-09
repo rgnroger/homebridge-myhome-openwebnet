@@ -3,7 +3,6 @@ import net from 'node:net';
 export interface OpenWebNetOptions {
   host: string;
   port: number;
-  timeout?: number;
 }
 
 export class OpenWebNetClient {
@@ -32,7 +31,6 @@ export class OpenWebNetClient {
       this.socket = socket;
 
       socket.setEncoding('utf8');
-      socket.setTimeout(this.options.timeout ?? 5000);
 
       socket.on('connect', () => {
         this.log('Conexão TCP OpenWebNet estabelecida.');
@@ -41,11 +39,6 @@ export class OpenWebNetClient {
 
       socket.on('data', (data: string) => {
         this.handleData(data);
-      });
-
-      socket.on('timeout', () => {
-        this.log('Timeout na conexão OpenWebNet.');
-        socket.destroy();
       });
 
       socket.on('error', (error: Error) => {
@@ -114,7 +107,6 @@ export class OpenWebNetClient {
     let frameEnd: number;
 
     while ((frameEnd = this.buffer.indexOf('##')) !== -1) {
-
       const frame = this.buffer.substring(0, frameEnd + 2);
 
       this.buffer = this.buffer.substring(frameEnd + 2);
@@ -126,7 +118,6 @@ export class OpenWebNetClient {
   }
 
   private handleFrame(frame: string): void {
-
     if (frame === '*#*1##') {
       this.log('OpenWebNet: ACK recebido.');
 
