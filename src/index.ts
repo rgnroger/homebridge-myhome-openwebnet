@@ -1,9 +1,11 @@
 import {
   API,
+  CharacteristicValue,
   DynamicPlatformPlugin,
   Logger,
   PlatformAccessory,
   PlatformConfig,
+  Service,
 } from 'homebridge';
 
 import { OpenWebNetClient } from './openwebnet.js';
@@ -11,9 +13,25 @@ import { OpenWebNetClient } from './openwebnet.js';
 const PLUGIN_NAME = 'homebridge-myhome-openwebnet';
 const PLATFORM_NAME = 'MyHomeOpenWebNet';
 
+interface MyHomeLight {
+  name: string;
+  where: string;
+}
+
+const LIGHTS: MyHomeLight[] = [
+  {
+    name: 'Luz 01',
+    where: '01',
+  },
+  {
+    name: 'Luz 41',
+    where: '41',
+  },
+];
+
 class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
 
-  private client?: OpenWebNetClient;
+  private readonly accessories: PlatformAccessory[] = [];
 
   constructor(
     public readonly log: Logger,
@@ -23,7 +41,7 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
     this.log.info('MyHome OpenWebNet plugin iniciado.');
 
     this.api.on('didFinishLaunching', () => {
-      this.start();
+      this.discoverLights();
     });
   }
 
@@ -32,18 +50,135 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
       'Acessório carregado do cache: %s',
       accessory.displayName,
     );
+
+    this.accessories.push(accessory);
   }
 
-  private async start(): Promise<void> {
+  private discoverLights(): void {
+
+    for (const light of LIGHTS) {
+
+      const uuid = this.api.hap.uuid.generate(
+        `myhome-openwebnet-light-${light.where}`,
+      );
+
+      let accessory = this.accessories.find(
+        (existingAccessory) => existingAccessory.UUID === uuid,
+      );
+
+      if (!accessory) {
+
+        accessory = new this.api.platformAccessory(
+          light.name,
+          uuid,
+        );
+
+        accessory.context.where = light.where;
+
+        this.api.registerPlatformAccessories(
+          PLUGIN_NAME,
+          PLATFORM_NAME,
+          [accessory],
+        );
+
+        this.log.info(
+          'Novo acessório criado: %s (%s)',
+          light.name,
+          light.where,
+        );
+
+      } else {
+
+        this.log.info(
+          'Acessório existente restaurado: %s (%s)',
+          light.name,
+          light.where,
+        );
+      }
+
+      this.configureLightAccessory(accessory, light);
+    }
+  }
+
+  private configureLightAccessory(
+    accessory: PlatformAccessory,
+    light: MyHomeLight,
+  ): void {
+
+    accessory.context.where = light.where;
+
+    const service =
+      accessory.getService(this.api.hap.Service.Lightbulb) ??
+      accessory.addService(
+        this.api.hap.Service.Lightbulb,
+        light.name,
+      );
+
+    service.setCharacteristic(
+      this.api.hap.Characteristic.Name,
+      light.name,
+    );
+
+    service
+      .getCharacteristic(this.api.hap.Characteristic.On)
+      .onSet(async (value: CharacteristicValue) => {
+
+        const on = Boolean(value);
+
+        this.log.info(
+          '%s: comando %s',
+          light.name,
+          on ? 'ON' : 'OFF',
+        );
+
+        try {
+
+          await this.sendLightCommand(
+            light.where,
+            on,
+          );
+
+          accessory.context.on = on;
+
+        } catch (error) {
+
+          const message =
+            error instanceof Error
+              ? error.message
+              : String(error);
+
+          this.log.error(
+            '%s: erro ao enviar comando: %s',
+            light.name,
+            message,
+          );
+
+          throw error;
+        }
+      });
+
+    service
+      .getCharacteristic(this.api.hap.Characteristic.On)
+      .onGet(() => {
+        return Boolean(accessory.context.on ?? false);
+      });
+  }
+
+  private async sendLightCommand(
+    where: string,
+    on: boolean,
+  ): Promise<void> {
+
     const host = this.config.host as string;
     const port = Number(this.config.port ?? 20000);
 
     if (!host) {
-      this.log.error('IP do gateway OpenWebNet não configurado.');
-      return;
+      throw new Error(
+        'IP do gateway OpenWebNet não configurado.',
+      );
     }
 
-    this.client = new OpenWebNetClient(
+    const client = new OpenWebNetClient(
       {
         host,
         port,
@@ -52,30 +187,25 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
     );
 
     try {
-      await this.client.connect();
 
-      await this.client.openCommandSession();
+      await client.connect();
 
-      this.log.info('Conectado e autenticado na sessão OpenWebNet.');
+      await client.openCommandSession();
 
-      await this.client.setLight('01', true);
-
-      this.log.info(
-        'Teste concluído: comando ON enviado para a luz 01.',
+      await client.setLight(
+        where,
+        on,
       );
 
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : String(error);
+    } finally {
 
-      this.log.error(`Erro OpenWebNet: ${message}`);
+      client.disconnect();
     }
   }
 }
 
 export default (api: API): void => {
+
   api.registerPlatform(
     PLUGIN_NAME,
     PLATFORM_NAME,
