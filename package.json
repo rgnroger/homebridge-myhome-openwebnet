@@ -4,6 +4,10 @@
   "description": "Homebridge plugin for Bticino/Legrand MyHome BUS using the OpenWebNet protocol.",
   "main": "dist/index.js",
   "type": "module",
+  "files": [
+  "dist",
+  "config.schema.json"
+],
   "scripts": {
     "build": "tsc",
     "clean": "if exist dist rmdir /s /q dist",
