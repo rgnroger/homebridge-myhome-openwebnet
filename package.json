@@ -1,0 +1,31 @@
+{
+  "name": "homebridge-myhome-openwebnet",
+  "version": "1.0.0",
+  "description": "Homebridge plugin for Bticino/Legrand MyHome BUS using the OpenWebNet protocol.",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "clean": "if exist dist rmdir /s /q dist",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "homebridge-plugin",
+    "homebridge",
+    "bticino",
+    "legrand",
+    "myhome",
+    "openwebnet",
+    "homekit"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22",
+    "homebridge": ">=2.0.0"
+  },
+  "devDependencies": {
+    "homebridge": "^2.4.0",
+    "typescript": "^7.0.2"
+  }
+}
