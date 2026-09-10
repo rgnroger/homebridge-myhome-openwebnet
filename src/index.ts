@@ -46,8 +46,8 @@ implements DynamicPlatformPlugin {
   private readonly states =
     new Map<string, boolean>();
 
-  private readonly commandsInProgress =
-    new Set<string>();
+  private readonly requestedStates =
+    new Map<string, boolean>();
 
   private client?: OpenWebNetClient;
 
@@ -163,10 +163,10 @@ implements DynamicPlatformPlugin {
         );
       })
       .onSet(
-        async (
+        (
           value: CharacteristicValue,
         ) => {
-          await this.setLight(
+          this.sendLightCommand(
             light,
             Boolean(value),
           );
@@ -237,58 +237,74 @@ implements DynamicPlatformPlugin {
       );
   }
 
-  private async setLight(
+  private sendLightCommand(
     light: MyHomeLight,
     on: boolean,
-  ): Promise<void> {
+  ): void {
     if (!this.client) {
-      throw new Error(
-        'OpenWebNet ainda não foi iniciado.',
+      this.log.error(
+        '%s: OpenWebNet ainda não foi iniciado.',
+        light.name,
       );
-    }
 
-    if (
-      this.states.get(light.where) ===
-      on
-    ) {
       return;
     }
 
-    if (
-      this.commandsInProgress.has(
+    const requestedState =
+      this.requestedStates.get(
         light.where,
-      )
+      );
+
+    const currentState =
+      this.states.get(light.where);
+
+    if (
+      requestedState === on
     ) {
       return;
     }
 
-    this.commandsInProgress.add(
+    if (
+      requestedState === undefined &&
+      currentState === on
+    ) {
+      return;
+    }
+
+    this.requestedStates.set(
       light.where,
+      on,
     );
 
-    try {
-      await this.client.setLight(
+    void this.client
+      .setLight(
         light.where,
         on,
-      );
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : String(error);
+      )
+      .catch(
+        (error: unknown) => {
+          const message =
+            error instanceof Error
+              ? error.message
+              : String(error);
 
-      this.log.error(
-        '%s: erro ao enviar comando (%s).',
-        light.name,
-        message,
-      );
+          this.log.error(
+            '%s: erro ao enviar comando (%s).',
+            light.name,
+            message,
+          );
 
-      throw error;
-    } finally {
-      this.commandsInProgress.delete(
-        light.where,
+          if (
+            this.requestedStates.get(
+              light.where,
+            ) === on
+          ) {
+            this.requestedStates.delete(
+              light.where,
+            );
+          }
+        },
       );
-    }
   }
 
   private updateLightState(
@@ -313,6 +329,13 @@ implements DynamicPlatformPlugin {
     );
 
     accessory.context.on = on;
+
+    if (
+      this.requestedStates.get(where) ===
+      on
+    ) {
+      this.requestedStates.delete(where);
+    }
 
     const service =
       accessory.getService(

@@ -18,7 +18,7 @@ class MyHomeOpenWebNetPlatform {
     accessories = [];
     accessoriesByWhere = new Map();
     states = new Map();
-    commandsInProgress = new Set();
+    requestedStates = new Map();
     client;
     constructor(log, config, api) {
         this.log = log;
@@ -64,8 +64,8 @@ class MyHomeOpenWebNetPlatform {
             return (this.states.get(light.where) ??
                 false);
         })
-            .onSet(async (value) => {
-            await this.setLight(light, Boolean(value));
+            .onSet((value) => {
+            this.sendLightCommand(light, Boolean(value));
         });
     }
     startOpenWebNet() {
@@ -99,31 +99,32 @@ class MyHomeOpenWebNetPlatform {
             this.log.error('Não foi possível iniciar o OpenWebNet: %s', message);
         });
     }
-    async setLight(light, on) {
+    sendLightCommand(light, on) {
         if (!this.client) {
-            throw new Error('OpenWebNet ainda não foi iniciado.');
-        }
-        if (this.states.get(light.where) ===
-            on) {
+            this.log.error('%s: OpenWebNet ainda não foi iniciado.', light.name);
             return;
         }
-        if (this.commandsInProgress.has(light.where)) {
+        const requestedState = this.requestedStates.get(light.where);
+        const currentState = this.states.get(light.where);
+        if (requestedState === on) {
             return;
         }
-        this.commandsInProgress.add(light.where);
-        try {
-            await this.client.setLight(light.where, on);
+        if (requestedState === undefined &&
+            currentState === on) {
+            return;
         }
-        catch (error) {
+        this.requestedStates.set(light.where, on);
+        void this.client
+            .setLight(light.where, on)
+            .catch((error) => {
             const message = error instanceof Error
                 ? error.message
                 : String(error);
             this.log.error('%s: erro ao enviar comando (%s).', light.name, message);
-            throw error;
-        }
-        finally {
-            this.commandsInProgress.delete(light.where);
-        }
+            if (this.requestedStates.get(light.where) === on) {
+                this.requestedStates.delete(light.where);
+            }
+        });
     }
     updateLightState(where, on) {
         const accessory = this.accessoriesByWhere.get(where);
@@ -133,6 +134,10 @@ class MyHomeOpenWebNetPlatform {
         const previousState = this.states.get(where);
         this.states.set(where, on);
         accessory.context.on = on;
+        if (this.requestedStates.get(where) ===
+            on) {
+            this.requestedStates.delete(where);
+        }
         const service = accessory.getService(this.api.hap.Service.Lightbulb);
         service?.updateCharacteristic(this.api.hap.Characteristic.On, on);
         if (previousState !== on) {
