@@ -1,23 +1,27 @@
 {
   "pluginAlias": "MyHomeOpenWebNet",
   "pluginType": "platform",
+  "singular": true,
+  "strictValidation": false,
   "schema": {
     "type": "object",
+    "required": ["name", "host", "port", "lights"],
+    "additionalProperties": false,
     "properties": {
       "name": {
-        "title": "Name",
+        "title": "Nome do plugin",
         "type": "string",
         "default": "MyHome OpenWebNet",
         "required": true
       },
       "host": {
-        "title": "Gateway IP Address",
+        "title": "IP do gateway MyHome",
         "type": "string",
-        "placeholder": "192.168.1.100",
+        "placeholder": "192.168.0.23",
         "required": true
       },
       "port": {
-        "title": "OpenWebNet Port",
+        "title": "Porta OpenWebNet",
         "type": "integer",
         "default": 20000,
         "minimum": 1,
@@ -25,10 +29,53 @@
         "required": true
       },
       "password": {
-        "title": "Password",
+        "title": "Senha OpenWebNet",
         "type": "string",
-        "default": "",
+        "default": "12345",
         "required": false
+      },
+      "lights": {
+        "title": "Luzes",
+        "description": "Adicione as luzes instaladas no sistema MyHome.",
+        "type": "array",
+        "default": [],
+        "items": {
+          "type": "object",
+          "title": "Luz",
+          "required": ["name", "area", "point", "bus"],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "title": "Nome da luz",
+              "type": "string",
+              "placeholder": "Ex.: Luz da sala",
+              "required": true
+            },
+            "area": {
+              "title": "Ambiente (A)",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 99,
+              "required": true
+            },
+            "point": {
+              "title": "Ponto de luz (PL)",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 99,
+              "required": true
+            },
+            "bus": {
+              "title": "BUS (B)",
+              "description": "Normalmente 0.",
+              "type": "integer",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 99,
+              "required": true
+            }
+          }
+        }
       }
     }
   },
@@ -36,6 +83,7 @@
     "name",
     "host",
     "port",
-    "password"
+    "password",
+    "lights"
   ]
 }

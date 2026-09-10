@@ -18,15 +18,18 @@ interface MyHomeLight {
   where: string;
 }
 
-const LIGHTS: MyHomeLight[] = [
-  { name: 'Luz 1', where: '11' },
-  { name: 'Luz 2', where: '12' },
-];
+interface ConfiguredLight {
+  name?: unknown;
+  bus?: unknown;
+  area?: unknown;
+  point?: unknown;
+}
 
 class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
   private readonly accessories: PlatformAccessory[] = [];
   private readonly accessoriesByWhere = new Map<string, PlatformAccessory>();
   private readonly states = new Map<string, boolean>();
+  private readonly lights: MyHomeLight[];
   private client?: OpenWebNetClient;
 
   constructor(
@@ -34,6 +37,8 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
     public readonly config: PlatformConfig,
     public readonly api: API,
   ) {
+    this.lights = this.readConfiguredLights();
+
     this.api.on(APIEvent.DID_FINISH_LAUNCHING, () => {
       this.discoverLights();
       this.startOpenWebNet();
@@ -49,10 +54,13 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
   }
 
   private discoverLights(): void {
-    for (const light of LIGHTS) {
+    const configuredUuids = new Set<string>();
+
+    for (const light of this.lights) {
       const uuid = this.api.hap.uuid.generate(
         `myhome-openwebnet-light-${light.where}`,
       );
+      configuredUuids.add(uuid);
 
       let accessory = this.accessories.find(
         (cachedAccessory) => cachedAccessory.UUID === uuid,
@@ -76,7 +84,24 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
       this.configureLightAccessory(accessory, light);
     }
 
-    this.log.info('Luzes 11 e 12 configuradas.');
+    const staleAccessories = this.accessories.filter(
+      (accessory) => !configuredUuids.has(accessory.UUID),
+    );
+
+    if (staleAccessories.length > 0) {
+      this.api.unregisterPlatformAccessories(
+        PLUGIN_NAME,
+        PLATFORM_NAME,
+        staleAccessories,
+      );
+    }
+
+    this.log.info(
+      '%d %s configurada%s.',
+      this.lights.length,
+      this.lights.length === 1 ? 'luz' : 'luzes',
+      this.lights.length === 1 ? '' : 's',
+    );
   }
 
   private configureLightAccessory(
@@ -119,11 +144,16 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
       return;
     }
 
+    if (this.lights.length === 0) {
+      this.log.warn('Nenhuma luz foi configurada.');
+      return;
+    }
+
     this.client = new OpenWebNetClient(
       {
         host,
         port,
-        monitoredLights: LIGHTS.map((light) => light.where),
+        monitoredLights: this.lights.map((light) => light.where),
       },
       (message) => this.log.info(message),
       {
@@ -171,6 +201,63 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
       legacyCharacteristic.emit('get', () => undefined);
     }
 
+  }
+
+  private readConfiguredLights(): MyHomeLight[] {
+    if (!Array.isArray(this.config.lights)) {
+      return [];
+    }
+
+    const lights: MyHomeLight[] = [];
+    const usedAddresses = new Set<string>();
+
+    for (const rawLight of this.config.lights as ConfiguredLight[]) {
+      const name = typeof rawLight.name === 'string'
+        ? rawLight.name.trim()
+        : '';
+      const bus = this.readAddressPart(rawLight.bus, 0);
+      const area = this.readAddressPart(rawLight.area);
+      const point = this.readAddressPart(rawLight.point);
+
+      if (!name || bus === undefined || area === undefined || point === undefined) {
+        this.log.warn('Uma luz foi ignorada porque sua configuração está incompleta.');
+        continue;
+      }
+
+      const where = this.toOpenWebNetAddress(bus, area, point);
+      if (usedAddresses.has(where)) {
+        this.log.warn('A luz %s foi ignorada porque o endereço está repetido.', name);
+        continue;
+      }
+
+      usedAddresses.add(where);
+      lights.push({ name, where });
+    }
+
+    return lights;
+  }
+
+  private readAddressPart(value: unknown, defaultValue?: number): number | undefined {
+    if ((value === undefined || value === null || value === '') && defaultValue !== undefined) {
+      return defaultValue;
+    }
+
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < 0 || number > 99) {
+      return undefined;
+    }
+
+    return number;
+  }
+
+  private toOpenWebNetAddress(bus: number, area: number, point: number): string {
+    const address = area >= 10 || point >= 10
+      ? `${String(area).padStart(2, '0')}${String(point).padStart(2, '0')}`
+      : `${area}${point}`;
+
+    return bus === 0
+      ? address
+      : `${address}#4#${String(bus).padStart(2, '0')}`;
   }
 }
 
