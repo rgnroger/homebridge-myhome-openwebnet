@@ -57,7 +57,6 @@ class MyHomeOpenWebNetPlatform {
             const on = Boolean(value);
             this.states.set(light.where, on);
             accessory.context.on = on;
-            this.log.info('HomeKit solicitou Luz %s: %s.', light.where, on ? 'ON' : 'OFF');
             this.sendLightCommand(light, on);
             callback(null);
         });
@@ -95,7 +94,6 @@ class MyHomeOpenWebNetPlatform {
         if (!accessory) {
             return;
         }
-        const previousState = this.states.get(where);
         this.states.set(where, on);
         accessory.context.on = on;
         const characteristic = accessory
@@ -106,9 +104,6 @@ class MyHomeOpenWebNetPlatform {
         if (characteristic) {
             const legacyCharacteristic = characteristic;
             legacyCharacteristic.emit('get', () => undefined);
-        }
-        if (previousState !== on) {
-            this.log.info('Luz %s confirmada pelo BUS como %s.', where, on ? 'ON' : 'OFF');
         }
     }
 }

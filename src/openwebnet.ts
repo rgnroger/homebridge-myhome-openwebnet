@@ -147,7 +147,6 @@ class OpenWebNetConnection {
   }
 
   private handleFrame(frame: string): void {
-    this.log(`[DIAG ${new Date().toISOString()}] ${this.type} RX ${frame}`);
     if (!this.ready) {
       if (frame !== ACK) {
         this.failReady(new Error(`${this.type}: gateway recusou a abertura da sessão.`));
@@ -257,7 +256,6 @@ class OpenWebNetConnection {
       throw new Error(`Sessão ${this.type} não está conectada.`);
     }
 
-    this.log(`[DIAG ${new Date().toISOString()}] ${this.type} TX ${frame}`);
     this.socket.write(frame);
   }
 
@@ -292,6 +290,7 @@ class OpenWebNetConnection {
 
 export class OpenWebNetClient {
   private readonly monitoredLights: ReadonlySet<string>;
+  private readonly lightStates = new Map<string, boolean>();
   private readonly command: OpenWebNetConnection;
   private readonly monitor: OpenWebNetConnection;
   private started = false;
@@ -396,7 +395,13 @@ export class OpenWebNetClient {
     }
 
     const on = what === '1';
-    this.log(`Luz ${where}: ${on ? 'ON' : 'OFF'}.`);
+    const previousState = this.lightStates.get(where);
+    this.lightStates.set(where, on);
+
+    if (previousState !== on) {
+      this.log(`Luz ${where}: ${on ? 'ON' : 'OFF'}.`);
+    }
+
     this.events.onLightState?.(where, on);
   }
 }
