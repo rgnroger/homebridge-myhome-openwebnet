@@ -266,7 +266,7 @@ export class OpenWebNetClient {
         for (const where of this.monitoredLights) {
             this.command.sendWithoutAck(`*#1*${where}##`);
         }
-        this.log('Leitura inicial solicitada para as luzes 01 e 41.');
+        this.log(`Leitura inicial solicitada para as luzes ${Array.from(this.monitoredLights).join(' e ')}.`);
     }
     // Compatibilidade temporária com o index.ts atual.
     connect() {

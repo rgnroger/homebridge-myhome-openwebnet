@@ -19,8 +19,8 @@ interface MyHomeLight {
 }
 
 const LIGHTS: MyHomeLight[] = [
-  { name: 'Luz 01', where: '01' },
-  { name: 'Luz 41', where: '41' },
+  { name: 'Luz 1', where: '11' },
+  { name: 'Luz 2', where: '12' },
 ];
 
 class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
@@ -76,7 +76,7 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
       this.configureLightAccessory(accessory, light);
     }
 
-    this.log.info('Luzes 01 e 41 configuradas.');
+    this.log.info('Luzes 11 e 12 configuradas.');
   }
 
   private configureLightAccessory(
