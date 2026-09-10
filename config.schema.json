@@ -84,6 +84,19 @@
     "host",
     "port",
     "password",
-    "lights"
+    {
+      "key": "lights",
+      "type": "array",
+      "name": " ",
+      "description": "Cadastre cada ponto de luz do sistema MyHome.",
+      "orderable": true,
+      "buttonText": "Adicionar luz",
+      "items": [
+        "lights[].name",
+        "lights[].area",
+        "lights[].point",
+        "lights[].bus"
+      ]
+    }
   ]
 }
