@@ -1,4 +1,4 @@
-import { OpenWebNetClient } from './openwebnet.js';
+import { OpenWebNetClient, } from './openwebnet.js';
 const PLUGIN_NAME = 'homebridge-myhome-openwebnet';
 const PLATFORM_NAME = 'MyHomeOpenWebNet';
 const LIGHTS = [
@@ -16,39 +16,43 @@ class MyHomeOpenWebNetPlatform {
     config;
     api;
     accessories = [];
+    accessoriesByWhere = new Map();
     states = new Map();
-    commandInProgress = new Set();
+    commandsInProgress = new Set();
+    client;
     constructor(log, config, api) {
         this.log = log;
         this.config = config;
         this.api = api;
-        this.log.info('MyHome OpenWebNet plugin iniciado.');
-        this.api.on('didFinishLaunching', () => {
+        this.api.on("didFinishLaunching" /* APIEvent.DID_FINISH_LAUNCHING */, () => {
             this.discoverLights();
+            this.startOpenWebNet();
+        });
+        this.api.on("shutdown" /* APIEvent.SHUTDOWN */, () => {
+            this.client?.stop();
         });
     }
     configureAccessory(accessory) {
-        this.log.info('Acessório carregado do cache: %s', accessory.displayName);
         this.accessories.push(accessory);
     }
     discoverLights() {
         for (const light of LIGHTS) {
             const uuid = this.api.hap.uuid.generate(`myhome-openwebnet-light-${light.where}`);
-            let accessory = this.accessories.find((existingAccessory) => existingAccessory.UUID === uuid);
+            let accessory = this.accessories.find((cachedAccessory) => cachedAccessory.UUID === uuid);
             if (!accessory) {
-                accessory = new this.api.platformAccessory(light.name, uuid);
-                accessory.context.where = light.where;
-                accessory.context.on = false;
+                accessory =
+                    new this.api.platformAccessory(light.name, uuid);
                 this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
-                this.log.info('Novo acessório criado: %s (%s)', light.name, light.where);
             }
-            else {
-                this.log.info('Acessório existente restaurado: %s (%s)', light.name, light.where);
-            }
-            const currentState = Boolean(accessory.context.on ?? false);
-            this.states.set(light.where, currentState);
+            accessory.context.where =
+                light.where;
+            accessory.context.on =
+                Boolean(accessory.context.on ?? false);
+            this.accessoriesByWhere.set(light.where, accessory);
+            this.states.set(light.where, accessory.context.on);
             this.configureLightAccessory(accessory, light);
         }
+        this.log.info('Luzes 01 e 41 configuradas.');
     }
     configureLightAccessory(accessory, light) {
         const service = accessory.getService(this.api.hap.Service.Lightbulb) ??
@@ -57,57 +61,82 @@ class MyHomeOpenWebNetPlatform {
         service
             .getCharacteristic(this.api.hap.Characteristic.On)
             .onGet(() => {
-            return this.states.get(light.where) ?? false;
+            return (this.states.get(light.where) ??
+                false);
         })
             .onSet(async (value) => {
-            const requestedState = Boolean(value);
-            const currentState = this.states.get(light.where);
-            if (currentState === requestedState) {
-                this.log.debug('%s: estado já é %s. Ignorando comando repetido.', light.name, requestedState ? 'ON' : 'OFF');
-                return;
-            }
-            if (this.commandInProgress.has(light.where)) {
-                this.log.debug('%s: comando já em andamento. Ignorando repetição.', light.name);
-                return;
-            }
-            this.commandInProgress.add(light.where);
-            this.log.info('%s: enviando comando %s', light.name, requestedState ? 'ON' : 'OFF');
-            try {
-                await this.sendLightCommand(light.where, requestedState);
-                this.states.set(light.where, requestedState);
-                accessory.context.on =
-                    requestedState;
-                this.log.info('%s: estado atualizado para %s', light.name, requestedState ? 'ON' : 'OFF');
-            }
-            catch (error) {
-                const message = error instanceof Error
-                    ? error.message
-                    : String(error);
-                this.log.error('%s: erro ao enviar comando: %s', light.name, message);
-                throw error;
-            }
-            finally {
-                this.commandInProgress.delete(light.where);
-            }
+            await this.setLight(light, Boolean(value));
         });
     }
-    async sendLightCommand(where, on) {
-        const host = this.config.host;
+    startOpenWebNet() {
+        const host = typeof this.config.host ===
+            'string'
+            ? this.config.host.trim()
+            : '';
         const port = Number(this.config.port ?? 20000);
         if (!host) {
-            throw new Error('IP do gateway OpenWebNet não configurado.');
+            this.log.error('IP do gateway OpenWebNet não configurado.');
+            return;
         }
-        const client = new OpenWebNetClient({
-            host,
-            port,
-        }, (message) => this.log.info(message));
+        this.client =
+            new OpenWebNetClient({
+                host,
+                port,
+                monitoredLights: LIGHTS.map((light) => light.where),
+            }, (message) => {
+                this.log.info(message);
+            }, {
+                onLightState: (where, on) => {
+                    this.updateLightState(where, on);
+                },
+            });
+        void this.client
+            .start()
+            .catch((error) => {
+            const message = error instanceof Error
+                ? error.message
+                : String(error);
+            this.log.error('Não foi possível iniciar o OpenWebNet: %s', message);
+        });
+    }
+    async setLight(light, on) {
+        if (!this.client) {
+            throw new Error('OpenWebNet ainda não foi iniciado.');
+        }
+        if (this.states.get(light.where) ===
+            on) {
+            return;
+        }
+        if (this.commandsInProgress.has(light.where)) {
+            return;
+        }
+        this.commandsInProgress.add(light.where);
         try {
-            await client.connect();
-            await client.openCommandSession();
-            await client.setLight(where, on);
+            await this.client.setLight(light.where, on);
+        }
+        catch (error) {
+            const message = error instanceof Error
+                ? error.message
+                : String(error);
+            this.log.error('%s: erro ao enviar comando (%s).', light.name, message);
+            throw error;
         }
         finally {
-            client.disconnect();
+            this.commandsInProgress.delete(light.where);
+        }
+    }
+    updateLightState(where, on) {
+        const accessory = this.accessoriesByWhere.get(where);
+        if (!accessory) {
+            return;
+        }
+        const previousState = this.states.get(where);
+        this.states.set(where, on);
+        accessory.context.on = on;
+        const service = accessory.getService(this.api.hap.Service.Lightbulb);
+        service?.updateCharacteristic(this.api.hap.Characteristic.On, on);
+        if (previousState !== on) {
+            this.log.info('Luz %s atualizada para %s.', where, on ? 'ON' : 'OFF');
         }
     }
 }
