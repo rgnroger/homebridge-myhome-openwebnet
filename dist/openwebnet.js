@@ -218,7 +218,6 @@ export class OpenWebNetClient {
     log;
     events;
     monitoredLights;
-    lightStates = new Map();
     command;
     monitor;
     started = false;
@@ -261,7 +260,6 @@ export class OpenWebNetClient {
         }
         await this.command.waitUntilReady();
         await this.command.send(`*1*${on ? '1' : '0'}*${where}##`);
-        this.log(`Luz ${where}: comando ${on ? 'ON' : 'OFF'} enviado.`);
     }
     requestInitialLightStates() {
         for (const where of this.monitoredLights) {
@@ -291,11 +289,6 @@ export class OpenWebNetClient {
             return;
         }
         const on = what === '1';
-        const previousState = this.lightStates.get(where);
-        this.lightStates.set(where, on);
-        if (previousState !== on) {
-            this.log(`Luz ${where}: ${on ? 'ON' : 'OFF'}.`);
-        }
         this.events.onLightState?.(where, on);
     }
 }

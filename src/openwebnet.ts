@@ -290,7 +290,6 @@ class OpenWebNetConnection {
 
 export class OpenWebNetClient {
   private readonly monitoredLights: ReadonlySet<string>;
-  private readonly lightStates = new Map<string, boolean>();
   private readonly command: OpenWebNetConnection;
   private readonly monitor: OpenWebNetConnection;
   private started = false;
@@ -355,7 +354,6 @@ export class OpenWebNetClient {
 
     await this.command.waitUntilReady();
     await this.command.send(`*1*${on ? '1' : '0'}*${where}##`);
-    this.log(`Luz ${where}: comando ${on ? 'ON' : 'OFF'} enviado.`);
   }
 
   public requestInitialLightStates(): void {
@@ -395,13 +393,6 @@ export class OpenWebNetClient {
     }
 
     const on = what === '1';
-    const previousState = this.lightStates.get(where);
-    this.lightStates.set(where, on);
-
-    if (previousState !== on) {
-      this.log(`Luz ${where}: ${on ? 'ON' : 'OFF'}.`);
-    }
-
     this.events.onLightState?.(where, on);
   }
 }
