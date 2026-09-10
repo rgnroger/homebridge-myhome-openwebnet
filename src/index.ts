@@ -170,8 +170,11 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
     this.states.set(where, on);
     accessory.context.on = on;
 
-    const service = accessory.getService(this.api.hap.Service.Lightbulb);
-    service?.updateCharacteristic(this.api.hap.Characteristic.On, on);
+    const characteristic = accessory
+      .getService(this.api.hap.Service.Lightbulb)
+      ?.getCharacteristic(this.api.hap.Characteristic.On);
+
+    characteristic?.sendEventNotification(on);
 
     if (previousState !== on) {
       this.log.info(
