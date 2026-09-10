@@ -94,20 +94,10 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
 
     service
       .getCharacteristic(this.api.hap.Characteristic.On)
-      .onGet(() => {
-        const state = this.states.get(light.where) ?? false;
-        this.log.info(
-          '[DIAG %s] GET luz=%s retorno=%s',
-          new Date().toISOString(), light.where, String(state),
-        );
-        return state;
+      .on('get', (callback) => {
+        callback(null, this.states.get(light.where) ?? false);
       })
-      .onSet((value: CharacteristicValue) => {
-        this.log.info(
-          '[DIAG %s] SET luz=%s valor=%s tipo=%s anterior=%s',
-          new Date().toISOString(), light.where, JSON.stringify(value),
-          typeof value, String(this.states.get(light.where)),
-        );
+      .on('set', (value: CharacteristicValue, callback) => {
         const on = Boolean(value);
 
         this.states.set(light.where, on);
@@ -120,6 +110,7 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
         );
 
         this.sendLightCommand(light, on);
+        callback(null);
       });
   }
 
@@ -161,14 +152,7 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
       return;
     }
 
-    void this.client.setLight(light.where, on).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      this.log.error(
-        '%s: erro ao enviar comando (%s).',
-        light.name,
-        message,
-      );
-    });
+    this.client.setLight(light.where, on);
   }
 
   private updateLightState(where: string, on: boolean): void {
@@ -186,12 +170,14 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
       .getService(this.api.hap.Service.Lightbulb)
       ?.getCharacteristic(this.api.hap.Characteristic.On);
 
-    this.log.info(
-      '[DIAG %s] EVENT luz=%s recebido=%s cacheHAP=%s characteristic=%s',
-      new Date().toISOString(), where, String(on),
-      JSON.stringify(characteristic?.value), String(Boolean(characteristic)),
-    );
-    characteristic?.sendEventNotification(on);
+    // Mesmo ciclo usado pelo fork funcional para Homebridge 2:
+    // o evento do BUS muda o estado e força a característica a relê-lo.
+    if (characteristic) {
+      const legacyCharacteristic = characteristic as unknown as {
+        emit: (event: 'get', callback: () => void) => boolean;
+      };
+      legacyCharacteristic.emit('get', () => undefined);
+    }
 
     if (previousState !== on) {
       this.log.info(
