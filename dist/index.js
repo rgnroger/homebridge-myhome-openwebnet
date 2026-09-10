@@ -50,8 +50,13 @@ class MyHomeOpenWebNetPlatform {
         service.setCharacteristic(this.api.hap.Characteristic.Name, light.name);
         service
             .getCharacteristic(this.api.hap.Characteristic.On)
-            .onGet(() => this.states.get(light.where) ?? false)
+            .onGet(() => {
+            const state = this.states.get(light.where) ?? false;
+            this.log.info('[DIAG %s] GET luz=%s retorno=%s', new Date().toISOString(), light.where, String(state));
+            return state;
+        })
             .onSet((value) => {
+            this.log.info('[DIAG %s] SET luz=%s valor=%s tipo=%s anterior=%s', new Date().toISOString(), light.where, JSON.stringify(value), typeof value, String(this.states.get(light.where)));
             const on = Boolean(value);
             this.states.set(light.where, on);
             accessory.context.on = on;
@@ -101,6 +106,7 @@ class MyHomeOpenWebNetPlatform {
         const characteristic = accessory
             .getService(this.api.hap.Service.Lightbulb)
             ?.getCharacteristic(this.api.hap.Characteristic.On);
+        this.log.info('[DIAG %s] EVENT luz=%s recebido=%s cacheHAP=%s characteristic=%s', new Date().toISOString(), where, String(on), JSON.stringify(characteristic?.value), String(Boolean(characteristic)));
         characteristic?.sendEventNotification(on);
         if (previousState !== on) {
             this.log.info('Luz %s confirmada pelo BUS como %s.', where, on ? 'ON' : 'OFF');

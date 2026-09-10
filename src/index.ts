@@ -94,8 +94,20 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
 
     service
       .getCharacteristic(this.api.hap.Characteristic.On)
-      .onGet(() => this.states.get(light.where) ?? false)
+      .onGet(() => {
+        const state = this.states.get(light.where) ?? false;
+        this.log.info(
+          '[DIAG %s] GET luz=%s retorno=%s',
+          new Date().toISOString(), light.where, String(state),
+        );
+        return state;
+      })
       .onSet((value: CharacteristicValue) => {
+        this.log.info(
+          '[DIAG %s] SET luz=%s valor=%s tipo=%s anterior=%s',
+          new Date().toISOString(), light.where, JSON.stringify(value),
+          typeof value, String(this.states.get(light.where)),
+        );
         const on = Boolean(value);
 
         this.states.set(light.where, on);
@@ -174,6 +186,11 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
       .getService(this.api.hap.Service.Lightbulb)
       ?.getCharacteristic(this.api.hap.Characteristic.On);
 
+    this.log.info(
+      '[DIAG %s] EVENT luz=%s recebido=%s cacheHAP=%s characteristic=%s',
+      new Date().toISOString(), where, String(on),
+      JSON.stringify(characteristic?.value), String(Boolean(characteristic)),
+    );
     characteristic?.sendEventNotification(on);
 
     if (previousState !== on) {
