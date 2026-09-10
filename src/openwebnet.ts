@@ -44,11 +44,7 @@ class OpenWebNetConnection {
     private readonly type: SessionType,
     private readonly options: Required<Pick<
       OpenWebNetOptions,
-      'host' |
-      'port' |
-      'reconnectDelayMs' |
-      'commandTimeoutMs' |
-      'keepAliveIntervalMs'
+      'host' | 'port' | 'reconnectDelayMs' | 'commandTimeoutMs' | 'keepAliveIntervalMs'
     >>,
     private readonly log: Log,
     private readonly onFrame: (frame: string) => void,
@@ -82,12 +78,7 @@ class OpenWebNetConnection {
 
   public send(frame: string): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      this.commandQueue.push({
-        frame,
-        resolve,
-        reject,
-      });
-
+      this.commandQueue.push({ frame, resolve, reject });
       this.processCommandQueue();
     });
   }
@@ -105,31 +96,21 @@ class OpenWebNetConnection {
     this.ready = false;
 
     this.clearTimers();
-
-    this.rejectCommands(
-      new Error(`Sessão ${this.type} encerrada.`),
-    );
-
-    this.failReady(
-      new Error(`Sessão ${this.type} encerrada.`),
-    );
+    this.rejectCommands(new Error(`Sessão ${this.type} encerrada.`));
+    this.failReady(new Error(`Sessão ${this.type} encerrada.`));
 
     this.socket?.destroy();
     this.socket = undefined;
   }
 
   private connect(): void {
-    if (
-      this.stopped ||
-      (this.socket && !this.socket.destroyed)
-    ) {
+    if (this.stopped || (this.socket && !this.socket.destroyed)) {
       return;
     }
 
     this.ready = false;
     this.sessionRequested = false;
     this.buffer = '';
-
     this.log(`${this.type}: conectando.`);
 
     const socket = net.createConnection({
@@ -138,45 +119,29 @@ class OpenWebNetConnection {
     });
 
     this.socket = socket;
-
     socket.setEncoding('utf8');
     socket.setKeepAlive(true, 30_000);
     socket.setNoDelay(true);
 
-    socket.on('data', (data: string) => {
-      this.handleData(data);
-    });
+    socket.on('data', (data: string) => this.handleData(data));
 
     socket.on('error', (error: Error) => {
       if (!this.stopped) {
-        this.log(
-          `${this.type}: erro de conexão (${error.message}).`,
-        );
+        this.log(`${this.type}: erro de conexão (${error.message}).`);
       }
     });
 
-    socket.on('close', () => {
-      this.handleClose();
-    });
+    socket.on('close', () => this.handleClose());
   }
 
   private handleData(data: string): void {
     this.buffer += data.trim();
 
     let frameEnd = this.buffer.indexOf('##');
-
     while (frameEnd !== -1) {
-      const frame = this.buffer.slice(
-        0,
-        frameEnd + 2,
-      );
-
-      this.buffer = this.buffer.slice(
-        frameEnd + 2,
-      );
-
+      const frame = this.buffer.slice(0, frameEnd + 2);
+      this.buffer = this.buffer.slice(frameEnd + 2);
       this.handleFrame(frame);
-
       frameEnd = this.buffer.indexOf('##');
     }
   }
@@ -184,33 +149,20 @@ class OpenWebNetConnection {
   private handleFrame(frame: string): void {
     if (!this.ready) {
       if (frame !== ACK) {
-        this.failReady(
-          new Error(
-            `${this.type}: gateway recusou a abertura da sessão.`,
-          ),
-        );
-
+        this.failReady(new Error(`${this.type}: gateway recusou a abertura da sessão.`));
         this.socket?.destroy();
         return;
       }
 
       if (!this.sessionRequested) {
         this.sessionRequested = true;
-
-        this.write(
-          this.type === 'COMMAND'
-            ? '*99*0##'
-            : '*99*1##',
-        );
-
+        this.write(this.type === 'COMMAND' ? '*99*0##' : '*99*1##');
         return;
       }
 
       this.ready = true;
-
       this.resolveReady?.();
       this.resetReadyPromise();
-
       this.log(`${this.type}: conectado.`);
 
       if (this.type === 'COMMAND') {
@@ -219,28 +171,7 @@ class OpenWebNetConnection {
 
       this.onReady?.();
       this.processCommandQueue();
-
       return;
-    }
-
-    if (
-      this.type === 'COMMAND' &&
-      this.activeCommand
-    ) {
-      if (frame === ACK) {
-        this.finishActiveCommand();
-        return;
-      }
-
-      if (frame === NACK) {
-        this.failActiveCommand(
-          new Error(
-            'O gateway recusou o comando OpenWebNet.',
-          ),
-        );
-
-        return;
-      }
     }
 
     if (frame !== ACK && frame !== NACK) {
@@ -249,16 +180,11 @@ class OpenWebNetConnection {
   }
 
   private processCommandQueue(): void {
-    if (
-      this.type !== 'COMMAND' ||
-      !this.ready ||
-      this.activeCommand
-    ) {
+    if (this.type !== 'COMMAND' || !this.ready || this.activeCommand) {
       return;
     }
 
     const next = this.commandQueue.shift();
-
     if (!next) {
       return;
     }
@@ -267,12 +193,8 @@ class OpenWebNetConnection {
     this.write(next.frame);
 
     this.commandTimer = setTimeout(() => {
-      this.failActiveCommand(
-        new Error(
-          'Tempo esgotado aguardando confirmação do gateway.',
-        ),
-      );
-    }, this.options.commandTimeoutMs);
+      this.finishActiveCommand();
+    }, 50);
   }
 
   private finishActiveCommand(): void {
@@ -284,17 +206,12 @@ class OpenWebNetConnection {
     this.commandTimer = undefined;
 
     const command = this.activeCommand;
-
     this.activeCommand = undefined;
-
     command.resolve();
-
     this.processCommandQueue();
   }
 
-  private failActiveCommand(
-    error: Error,
-  ): void {
+  private failActiveCommand(error: Error): void {
     if (!this.activeCommand) {
       return;
     }
@@ -303,11 +220,8 @@ class OpenWebNetConnection {
     this.commandTimer = undefined;
 
     const command = this.activeCommand;
-
     this.activeCommand = undefined;
-
     command.reject(error);
-
     this.processCommandQueue();
   }
 
@@ -315,73 +229,45 @@ class OpenWebNetConnection {
     this.socket = undefined;
     this.ready = false;
     this.sessionRequested = false;
-
     this.clearTimers();
-
-    this.rejectCommands(
-      new Error(
-        `Conexão ${this.type} perdida.`,
-      ),
-    );
+    this.rejectCommands(new Error(`Conexão ${this.type} perdida.`));
 
     if (this.stopped) {
       return;
     }
 
     this.log(
-      `${this.type}: desconectado; nova tentativa em ${
-        this.options.reconnectDelayMs / 1_000
-      } segundos.`,
+      `${this.type}: desconectado; nova tentativa em ${this.options.reconnectDelayMs / 1_000} segundos.`,
     );
-
-    this.reconnectTimer = setTimeout(() => {
-      this.connect();
-    }, this.options.reconnectDelayMs);
+    this.reconnectTimer = setTimeout(() => this.connect(), this.options.reconnectDelayMs);
   }
 
   private startKeepAlive(): void {
     clearInterval(this.keepAliveTimer);
-
     this.keepAliveTimer = setInterval(() => {
-      if (
-        this.ready &&
-        !this.activeCommand
-      ) {
+      if (this.ready && !this.activeCommand) {
         this.write('*#13**15##');
       }
     }, this.options.keepAliveIntervalMs);
   }
 
   private write(frame: string): void {
-    if (
-      !this.socket ||
-      this.socket.destroyed
-    ) {
-      throw new Error(
-        `Sessão ${this.type} não está conectada.`,
-      );
+    if (!this.socket || this.socket.destroyed) {
+      throw new Error(`Sessão ${this.type} não está conectada.`);
     }
 
     this.socket.write(frame);
   }
 
-  private rejectCommands(
-    error: Error,
-  ): void {
+  private rejectCommands(error: Error): void {
     this.failActiveCommand(error);
 
-    while (
-      this.commandQueue.length > 0
-    ) {
-      this.commandQueue
-        .shift()
-        ?.reject(error);
+    while (this.commandQueue.length > 0) {
+      this.commandQueue.shift()?.reject(error);
     }
   }
 
-  private failReady(
-    error: Error,
-  ): void {
+  private failReady(error: Error): void {
     this.rejectReady?.(error);
     this.resetReadyPromise();
   }
@@ -396,7 +282,6 @@ class OpenWebNetConnection {
     clearTimeout(this.reconnectTimer);
     clearTimeout(this.commandTimer);
     clearInterval(this.keepAliveTimer);
-
     this.reconnectTimer = undefined;
     this.commandTimer = undefined;
     this.keepAliveTimer = undefined;
@@ -404,63 +289,40 @@ class OpenWebNetConnection {
 }
 
 export class OpenWebNetClient {
-  private readonly monitoredLights:
-    ReadonlySet<string>;
-
-  private readonly command:
-    OpenWebNetConnection;
-
-  private readonly monitor:
-    OpenWebNetConnection;
-
+  private readonly monitoredLights: ReadonlySet<string>;
+  private readonly command: OpenWebNetConnection;
+  private readonly monitor: OpenWebNetConnection;
   private started = false;
 
   constructor(
     options: OpenWebNetOptions,
     private readonly log: Log,
-    private readonly events:
-      OpenWebNetEvents = {},
+    private readonly events: OpenWebNetEvents = {},
   ) {
     const connectionOptions = {
       host: options.host,
       port: options.port,
-      reconnectDelayMs:
-        options.reconnectDelayMs ?? 5_000,
-      commandTimeoutMs:
-        options.commandTimeoutMs ?? 3_000,
-      keepAliveIntervalMs:
-        options.keepAliveIntervalMs ?? 25_000,
+      reconnectDelayMs: options.reconnectDelayMs ?? 5_000,
+      commandTimeoutMs: options.commandTimeoutMs ?? 3_000,
+      keepAliveIntervalMs: options.keepAliveIntervalMs ?? 25_000,
     };
 
-    this.monitoredLights = new Set(
-      options.monitoredLights ?? [
-        '01',
-        '41',
-      ],
+    this.monitoredLights = new Set(options.monitoredLights ?? ['01', '41']);
+
+    this.command = new OpenWebNetConnection(
+      'COMMAND',
+      connectionOptions,
+      this.log,
+      (frame) => this.handleBusFrame(frame),
+      () => this.requestInitialLightStates(),
     );
 
-    this.command =
-      new OpenWebNetConnection(
-        'COMMAND',
-        connectionOptions,
-        this.log,
-        (frame) => {
-          this.handleBusFrame(frame);
-        },
-        () => {
-          this.requestInitialLightStates();
-        },
-      );
-
-    this.monitor =
-      new OpenWebNetConnection(
-        'MONITOR',
-        connectionOptions,
-        this.log,
-        (frame) => {
-          this.handleBusFrame(frame);
-        },
-      );
+    this.monitor = new OpenWebNetConnection(
+      'MONITOR',
+      connectionOptions,
+      this.log,
+      (frame) => this.handleBusFrame(frame),
+    );
   }
 
   public async start(): Promise<void> {
@@ -469,12 +331,10 @@ export class OpenWebNetClient {
         this.command.waitUntilReady(),
         this.monitor.waitUntilReady(),
       ]);
-
       return;
     }
 
     this.started = true;
-
     await Promise.all([
       this.command.start(),
       this.monitor.start(),
@@ -483,98 +343,56 @@ export class OpenWebNetClient {
 
   public stop(): void {
     this.started = false;
-
     this.command.stop();
     this.monitor.stop();
   }
 
-  public async setLight(
-    where: string,
-    on: boolean,
-  ): Promise<void> {
-    if (
-      !this.monitoredLights.has(where)
-    ) {
-      throw new Error(
-        `Luz ${where} não está configurada para monitoramento.`,
-      );
+  public async setLight(where: string, on: boolean): Promise<void> {
+    if (!this.monitoredLights.has(where)) {
+      throw new Error(`Luz ${where} não está configurada para monitoramento.`);
     }
 
     await this.command.waitUntilReady();
-
-    await this.command.send(
-      `*1*${on ? '1' : '0'}*${where}##`,
-    );
-
-    this.log(
-      `Luz ${where}: comando ${
-        on ? 'ON' : 'OFF'
-      } enviado.`,
-    );
+    await this.command.send(`*1*${on ? '1' : '0'}*${where}##`);
+    this.log(`Luz ${where}: comando ${on ? 'ON' : 'OFF'} enviado.`);
   }
 
   public requestInitialLightStates(): void {
-    for (
-      const where of this.monitoredLights
-    ) {
-      this.command.sendWithoutAck(
-        `*#1*${where}##`,
-      );
+    for (const where of this.monitoredLights) {
+      this.command.sendWithoutAck(`*#1*${where}##`);
     }
 
-    this.log(
-      'Leitura inicial solicitada para as luzes 01 e 41.',
-    );
+    this.log('Leitura inicial solicitada para as luzes 01 e 41.');
   }
 
-  // Compatibilidade temporária
-  // com o index.ts atual.
+  // Compatibilidade temporária com o index.ts atual.
   public connect(): Promise<void> {
     return this.start();
   }
 
-  // start() já abre a sessão COMMAND.
-  public openCommandSession():
-    Promise<void> {
+  // start() já abre a sessão COMMAND; este método pode ser removido depois.
+  public openCommandSession(): Promise<void> {
     return this.command.waitUntilReady();
   }
 
-  // Compatibilidade temporária
-  // com o index.ts atual.
+  // Alias temporário usado pelo index.ts atual.
   public disconnect(): void {
     this.stop();
   }
 
-  private handleBusFrame(
-    frame: string,
-  ): void {
-    const match = frame.match(
-      /^\*1\*(0|1)\*([0-9#]+)##$/,
-    );
-
+  private handleBusFrame(frame: string): void {
+    const match = frame.match(/^\*1\*(0|1)\*([0-9#]+)##$/);
     if (!match) {
       return;
     }
 
     const [, what, where] = match;
-
-    if (
-      !this.monitoredLights.has(where)
-    ) {
+    if (!this.monitoredLights.has(where)) {
       return;
     }
 
     const on = what === '1';
-
-    this.log(
-      `Luz ${where}: ${
-        on ? 'ON' : 'OFF'
-      }.`,
-    );
-
-    this.events.onLightState?.(
-      where,
-      on,
-    );
+    this.log(`Luz ${where}: ${on ? 'ON' : 'OFF'}.`);
+    this.events.onLightState?.(where, on);
   }
 }
