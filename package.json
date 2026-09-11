@@ -1,15 +1,17 @@
 {
   "name": "homebridge-myhome-openwebnet",
   "version": "1.0.0",
-  "description": "Homebridge plugin for Bticino/Legrand MyHome BUS using the OpenWebNet protocol.",
-  "main": "dist/index.js",
-  "type": "module",
+  "description": "Homebridge plugin for Bticino/Legrand MyHome BUS and SCS using the proven OpenWebNet core from homebridge-myhome-hb2.",
+  "main": "index.js",
+  "type": "commonjs",
   "files": [
-    "dist",
-    "config.schema.json"
+    "index.js",
+    "lib",
+    "config.schema.json",
+    "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node --check index.js && node --check lib/mhclient.js",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -18,18 +20,26 @@
     "bticino",
     "legrand",
     "myhome",
+    "my-home",
+    "bus",
+    "bus-scs",
+    "scs",
     "openwebnet",
     "homekit"
   ],
   "author": "",
   "license": "MIT",
   "engines": {
-    "node": ">=22",
-    "homebridge": ">=2.0.0"
+    "node": ">=18.0.0",
+    "homebridge": ">=1.6.0"
   },
-  "devDependencies": {
-    "@types/node": "^26.5.0",
-    "homebridge": "^2.4.0",
-    "typescript": "^7.0.2"
+  "dependencies": {
+    "correcting-interval": "^2.0.0",
+    "debug": "^2.4.5",
+    "fakegato-history": "^0.5.6",
+    "moment": "^2.18.1",
+    "net": "^1.0.0",
+    "sha256": "^0.2.0",
+    "sprintf-js": "^1.0.3"
   }
 }
