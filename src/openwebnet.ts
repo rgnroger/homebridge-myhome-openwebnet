@@ -449,12 +449,28 @@ export class OpenWebNetClient {
   }
 
   public requestInitialStates(): void {
+    const lightingBusQueries = new Set<string>();
     for (const where of this.monitoredLights) {
-      this.command.sendWithoutAck(`*#1*${where}##`);
+      const busMarker = '#4#';
+      const busMarkerIndex = where.indexOf(busMarker);
+      const query = busMarkerIndex === -1
+        ? '*#1*0##'
+        : `*#1*0#4#${where.slice(busMarkerIndex + busMarker.length)}##`;
+      lightingBusQueries.add(query);
+    }
+
+    for (const query of lightingBusQueries) {
+      void this.command.send(query).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.log(`Erro na leitura inicial das luzes (${message}).`);
+      });
     }
 
     for (const where of this.monitoredAdvancedBlinds) {
-      this.command.sendWithoutAck(`*#2*${where}*10##`);
+      void this.command.send(`*#2*${where}*10##`).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.log(`Persiana avançada ${where}: erro na leitura inicial (${message}).`);
+      });
     }
 
     const total = this.monitoredLights.size + this.monitoredAdvancedBlinds.size;
