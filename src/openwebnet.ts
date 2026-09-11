@@ -4,6 +4,8 @@ export interface OpenWebNetOptions {
   host: string;
   port: number;
   monitoredLights?: readonly string[];
+  monitoredBlinds?: readonly string[];
+  monitoredAdvancedBlinds?: readonly string[];
   reconnectDelayMs?: number;
   commandTimeoutMs?: number;
   keepAliveIntervalMs?: number;
@@ -12,6 +14,12 @@ export interface OpenWebNetOptions {
 export interface OpenWebNetEvents {
   onLightState?: (where: string, on: boolean) => void;
   onDimmerState?: (where: string, brightness: number) => void;
+  onBlindState?: (where: string, direction: 0 | 1 | 2) => void;
+  onAdvancedBlindState?: (
+    where: string,
+    direction: 'STOP' | 'UP' | 'DOWN',
+    position: number,
+  ) => void;
 }
 
 type SessionType = 'COMMAND' | 'MONITOR';
@@ -292,9 +300,12 @@ class OpenWebNetConnection {
 
 export class OpenWebNetClient {
   private readonly monitoredLights: ReadonlySet<string>;
+  private readonly monitoredBlinds: ReadonlySet<string>;
+  private readonly monitoredAdvancedBlinds: ReadonlySet<string>;
   private readonly command: OpenWebNetConnection;
   private readonly monitor: OpenWebNetConnection;
   private readonly dimmerTimers = new Map<string, NodeJS.Timeout>();
+  private readonly blindTimers = new Map<string, NodeJS.Timeout>();
   private started = false;
 
   constructor(
@@ -311,13 +322,15 @@ export class OpenWebNetClient {
     };
 
     this.monitoredLights = new Set(options.monitoredLights ?? ['01', '41']);
+    this.monitoredBlinds = new Set(options.monitoredBlinds ?? []);
+    this.monitoredAdvancedBlinds = new Set(options.monitoredAdvancedBlinds ?? []);
 
     this.command = new OpenWebNetConnection(
       'COMMAND',
       connectionOptions,
       this.log,
       (frame) => this.handleBusFrame(frame),
-      () => this.requestInitialLightStates(),
+      () => this.requestInitialStates(),
     );
 
     this.monitor = new OpenWebNetConnection(
@@ -350,6 +363,10 @@ export class OpenWebNetClient {
       clearTimeout(timer);
     }
     this.dimmerTimers.clear();
+    for (const timer of this.blindTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.blindTimers.clear();
     this.command.stop();
     this.monitor.stop();
   }
@@ -388,14 +405,62 @@ export class OpenWebNetClient {
     this.dimmerTimers.set(where, timer);
   }
 
-  public requestInitialLightStates(): void {
+  public setBlind(where: string, direction: 0 | 1 | 2): void {
+    if (!this.monitoredBlinds.has(where)) {
+      throw new Error(`Persiana ${where} não está configurada para monitoramento.`);
+    }
+
+    clearTimeout(this.blindTimers.get(where));
+    this.blindTimers.delete(where);
+
+    const send = (frame: string): void => {
+      void this.command.waitUntilReady()
+        .then(() => this.command.send(frame))
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.log(`Persiana ${where}: erro ao enviar comando (${message}).`);
+        });
+    };
+
+    send(`*2*0*${where}##`);
+    if (direction === 0) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      this.blindTimers.delete(where);
+      send(`*2*${direction}*${where}##`);
+    }, 500);
+    this.blindTimers.set(where, timer);
+  }
+
+  public setAdvancedBlind(where: string, position: number): void {
+    if (!this.monitoredAdvancedBlinds.has(where)) {
+      throw new Error(`Persiana avançada ${where} não está configurada para monitoramento.`);
+    }
+
+    const target = Math.max(0, Math.min(100, Math.round(position)));
+    void this.command.waitUntilReady()
+      .then(() => this.command.send(`*#2*${where}*#11#1*${target}##`))
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.log(`Persiana avançada ${where}: erro ao enviar posição (${message}).`);
+      });
+  }
+
+  public requestInitialStates(): void {
     for (const where of this.monitoredLights) {
       this.command.sendWithoutAck(`*#1*${where}##`);
     }
 
-    this.log(
-      `Leitura inicial solicitada para as luzes ${Array.from(this.monitoredLights).join(' e ')}.`,
-    );
+    for (const where of this.monitoredAdvancedBlinds) {
+      this.command.sendWithoutAck(`*#2*${where}*10##`);
+    }
+
+    const total = this.monitoredLights.size + this.monitoredAdvancedBlinds.size;
+    if (total > 0) {
+      this.log(`Leitura inicial solicitada para ${total} dispositivo(s).`);
+    }
   }
 
   // Compatibilidade temporária com o index.ts atual.
@@ -414,6 +479,33 @@ export class OpenWebNetClient {
   }
 
   private handleBusFrame(frame: string): void {
+    const advancedBlindMatch = frame.match(
+      /^\*#2\*([0-9#]+)\*10\*(\d+)\*(\d+)(?:\*\d+){0,2}##$/,
+    );
+
+    if (advancedBlindMatch) {
+      const [, where, rawDirection, rawPosition] = advancedBlindMatch;
+      if (this.monitoredAdvancedBlinds.has(where)) {
+        const direction = rawDirection === '11'
+          ? 'UP'
+          : rawDirection === '12'
+            ? 'DOWN'
+            : 'STOP';
+        const position = Math.max(0, Math.min(100, Number(rawPosition)));
+        this.events.onAdvancedBlindState?.(where, direction, position);
+      }
+      return;
+    }
+
+    const blindMatch = frame.match(/^\*2\*([012])\*([0-9#]+)##$/);
+    if (blindMatch) {
+      const [, rawDirection, where] = blindMatch;
+      if (this.monitoredBlinds.has(where)) {
+        this.events.onBlindState?.(where, Number(rawDirection) as 0 | 1 | 2);
+      }
+      return;
+    }
+
     const advancedDimmerMatch = frame.match(
       /^\*#1\*([0-9#]+)\*\d+\*(\d+)\*\d+##$/,
     );

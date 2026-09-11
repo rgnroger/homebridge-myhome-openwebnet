@@ -119,6 +119,107 @@
             }
           }
         }
+      },
+      "blinds": {
+        "title": "Persianas comuns",
+        "description": "Persianas sem posição absoluta, controladas pelo tempo de percurso.",
+        "type": "array",
+        "default": [],
+        "items": {
+          "type": "object",
+          "title": "Persiana comum",
+          "required": ["name", "area", "point", "bus", "travelTime"],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "title": "Nome da persiana",
+              "type": "string",
+              "placeholder": "Ex.: Persiana da sala",
+              "required": true
+            },
+            "area": {
+              "title": "Ambiente (A)",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 99,
+              "required": true
+            },
+            "point": {
+              "title": "Ponto (PL)",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 99,
+              "required": true
+            },
+            "bus": {
+              "title": "BUS (B)",
+              "description": "Normalmente 0.",
+              "type": "integer",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 99,
+              "required": true
+            },
+            "travelTime": {
+              "title": "Tempo total de percurso (segundos)",
+              "description": "Tempo para abrir ou fechar completamente.",
+              "type": "number",
+              "default": 30,
+              "minimum": 1,
+              "maximum": 600,
+              "required": true
+            },
+            "invert": {
+              "title": "Inverter subir e descer",
+              "type": "boolean",
+              "default": false,
+              "required": false
+            }
+          }
+        }
+      },
+      "advancedBlinds": {
+        "title": "Persianas avançadas",
+        "description": "Persianas MyHome que informam e recebem posição absoluta de 0 a 100%.",
+        "type": "array",
+        "default": [],
+        "items": {
+          "type": "object",
+          "title": "Persiana avançada",
+          "required": ["name", "area", "point", "bus"],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "title": "Nome da persiana",
+              "type": "string",
+              "placeholder": "Ex.: Persiana do quarto",
+              "required": true
+            },
+            "area": {
+              "title": "Ambiente (A)",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 99,
+              "required": true
+            },
+            "point": {
+              "title": "Ponto (PL)",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 99,
+              "required": true
+            },
+            "bus": {
+              "title": "BUS (B)",
+              "description": "Normalmente 0.",
+              "type": "integer",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 99,
+              "required": true
+            }
+          }
+        }
       }
     }
   },
@@ -153,6 +254,36 @@
         "dimmers[].area",
         "dimmers[].point",
         "dimmers[].bus"
+      ]
+    },
+    {
+      "key": "blinds",
+      "type": "array",
+      "name": " ",
+      "description": "Cadastre persianas comuns e informe o tempo total de percurso.",
+      "orderable": true,
+      "buttonText": "Adicionar persiana comum",
+      "items": [
+        "blinds[].name",
+        "blinds[].area",
+        "blinds[].point",
+        "blinds[].bus",
+        "blinds[].travelTime",
+        "blinds[].invert"
+      ]
+    },
+    {
+      "key": "advancedBlinds",
+      "type": "array",
+      "name": " ",
+      "description": "Cadastre persianas com controle e feedback de posição absoluta.",
+      "orderable": true,
+      "buttonText": "Adicionar persiana avançada",
+      "items": [
+        "advancedBlinds[].name",
+        "advancedBlinds[].area",
+        "advancedBlinds[].point",
+        "advancedBlinds[].bus"
       ]
     }
   ]
