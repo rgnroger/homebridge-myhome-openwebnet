@@ -5,7 +5,7 @@
   "strictValidation": false,
   "schema": {
     "type": "object",
-    "required": ["name", "host", "port", "lights"],
+    "required": ["name", "host", "port"],
     "additionalProperties": false,
     "properties": {
       "name": {
@@ -76,6 +76,49 @@
             }
           }
         }
+      },
+      "dimmers": {
+        "title": "Dimmers",
+        "description": "Adicione as luzes com controle de intensidade.",
+        "type": "array",
+        "default": [],
+        "items": {
+          "type": "object",
+          "title": "Dimmer",
+          "required": ["name", "area", "point", "bus"],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "title": "Nome do dimmer",
+              "type": "string",
+              "placeholder": "Ex.: Luz da sala",
+              "required": true
+            },
+            "area": {
+              "title": "Ambiente (A)",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 99,
+              "required": true
+            },
+            "point": {
+              "title": "Ponto de luz (PL)",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 99,
+              "required": true
+            },
+            "bus": {
+              "title": "BUS (B)",
+              "description": "Normalmente 0.",
+              "type": "integer",
+              "default": 0,
+              "minimum": 0,
+              "maximum": 99,
+              "required": true
+            }
+          }
+        }
       }
     }
   },
@@ -96,6 +139,20 @@
         "lights[].area",
         "lights[].point",
         "lights[].bus"
+      ]
+    },
+    {
+      "key": "dimmers",
+      "type": "array",
+      "name": " ",
+      "description": "Cadastre cada dimmer do sistema MyHome.",
+      "orderable": true,
+      "buttonText": "Adicionar dimmer",
+      "items": [
+        "dimmers[].name",
+        "dimmers[].area",
+        "dimmers[].point",
+        "dimmers[].bus"
       ]
     }
   ]

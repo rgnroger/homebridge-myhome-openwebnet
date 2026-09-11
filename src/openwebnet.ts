@@ -11,6 +11,7 @@ export interface OpenWebNetOptions {
 
 export interface OpenWebNetEvents {
   onLightState?: (where: string, on: boolean) => void;
+  onDimmerState?: (where: string, brightness: number) => void;
 }
 
 type SessionType = 'COMMAND' | 'MONITOR';
@@ -24,6 +25,7 @@ interface PendingCommand {
 
 const ACK = '*#*1##';
 const NACK = '*#*0##';
+const DIMMER_LEVELS = [0, 100, 1, 10, 20, 30, 40, 50, 60, 75, 100] as const;
 
 class OpenWebNetConnection {
   private socket?: net.Socket;
@@ -292,6 +294,7 @@ export class OpenWebNetClient {
   private readonly monitoredLights: ReadonlySet<string>;
   private readonly command: OpenWebNetConnection;
   private readonly monitor: OpenWebNetConnection;
+  private readonly dimmerTimers = new Map<string, NodeJS.Timeout>();
   private started = false;
 
   constructor(
@@ -343,6 +346,10 @@ export class OpenWebNetClient {
 
   public stop(): void {
     this.started = false;
+    for (const timer of this.dimmerTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.dimmerTimers.clear();
     this.command.stop();
     this.monitor.stop();
   }
@@ -354,6 +361,31 @@ export class OpenWebNetClient {
 
     await this.command.waitUntilReady();
     await this.command.send(`*1*${on ? '1' : '0'}*${where}##`);
+  }
+
+  public setDimmer(where: string, brightness: number): void {
+    if (!this.monitoredLights.has(where)) {
+      throw new Error(`Dimmer ${where} não está configurado para monitoramento.`);
+    }
+
+    clearTimeout(this.dimmerTimers.get(where));
+
+    const level = Math.max(0, Math.min(100, Math.round(brightness)));
+    const frame = level > 0
+      ? `*#1*${where}*#1*${level + 100}*1##`
+      : `*1*0*${where}##`;
+
+    const timer = setTimeout(() => {
+      this.dimmerTimers.delete(where);
+      void this.command.waitUntilReady()
+        .then(() => this.command.send(frame))
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          this.log(`Dimmer ${where}: erro ao enviar brilho (${message}).`);
+        });
+    }, 500);
+
+    this.dimmerTimers.set(where, timer);
   }
 
   public requestInitialLightStates(): void {
@@ -382,17 +414,24 @@ export class OpenWebNetClient {
   }
 
   private handleBusFrame(frame: string): void {
-    const match = frame.match(/^\*1\*(0|1)\*([0-9#]+)##$/);
+    const match = frame.match(/^\*1\*(\d+)\*([0-9#]+)##$/);
     if (!match) {
       return;
     }
 
-    const [, what, where] = match;
+    const [, rawLevel, where] = match;
     if (!this.monitoredLights.has(where)) {
       return;
     }
 
-    const on = what === '1';
-    this.events.onLightState?.(where, on);
+    const level = Number(rawLevel);
+    if (level === 0 || level === 1) {
+      this.events.onLightState?.(where, level === 1);
+      return;
+    }
+
+    if (level >= 2 && level <= 10) {
+      this.events.onDimmerState?.(where, DIMMER_LEVELS[level]);
+    }
   }
 }

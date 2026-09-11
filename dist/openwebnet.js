@@ -1,6 +1,7 @@
 import net from 'node:net';
 const ACK = '*#*1##';
 const NACK = '*#*0##';
+const DIMMER_LEVELS = [0, 100, 1, 10, 20, 30, 40, 50, 60, 75, 100];
 class OpenWebNetConnection {
     type;
     options;
@@ -220,6 +221,7 @@ export class OpenWebNetClient {
     monitoredLights;
     command;
     monitor;
+    dimmerTimers = new Map();
     started = false;
     constructor(options, log, events = {}) {
         this.log = log;
@@ -251,6 +253,10 @@ export class OpenWebNetClient {
     }
     stop() {
         this.started = false;
+        for (const timer of this.dimmerTimers.values()) {
+            clearTimeout(timer);
+        }
+        this.dimmerTimers.clear();
         this.command.stop();
         this.monitor.stop();
     }
@@ -260,6 +266,26 @@ export class OpenWebNetClient {
         }
         await this.command.waitUntilReady();
         await this.command.send(`*1*${on ? '1' : '0'}*${where}##`);
+    }
+    setDimmer(where, brightness) {
+        if (!this.monitoredLights.has(where)) {
+            throw new Error(`Dimmer ${where} não está configurado para monitoramento.`);
+        }
+        clearTimeout(this.dimmerTimers.get(where));
+        const level = Math.max(0, Math.min(100, Math.round(brightness)));
+        const frame = level > 0
+            ? `*#1*${where}*#1*${level + 100}*1##`
+            : `*1*0*${where}##`;
+        const timer = setTimeout(() => {
+            this.dimmerTimers.delete(where);
+            void this.command.waitUntilReady()
+                .then(() => this.command.send(frame))
+                .catch((error) => {
+                const message = error instanceof Error ? error.message : String(error);
+                this.log(`Dimmer ${where}: erro ao enviar brilho (${message}).`);
+            });
+        }, 500);
+        this.dimmerTimers.set(where, timer);
     }
     requestInitialLightStates() {
         for (const where of this.monitoredLights) {
@@ -280,15 +306,21 @@ export class OpenWebNetClient {
         this.stop();
     }
     handleBusFrame(frame) {
-        const match = frame.match(/^\*1\*(0|1)\*([0-9#]+)##$/);
+        const match = frame.match(/^\*1\*(\d+)\*([0-9#]+)##$/);
         if (!match) {
             return;
         }
-        const [, what, where] = match;
+        const [, rawLevel, where] = match;
         if (!this.monitoredLights.has(where)) {
             return;
         }
-        const on = what === '1';
-        this.events.onLightState?.(where, on);
+        const level = Number(rawLevel);
+        if (level === 0 || level === 1) {
+            this.events.onLightState?.(where, level === 1);
+            return;
+        }
+        if (level >= 2 && level <= 10) {
+            this.events.onDimmerState?.(where, DIMMER_LEVELS[level]);
+        }
     }
 }
