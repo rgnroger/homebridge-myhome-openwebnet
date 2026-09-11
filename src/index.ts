@@ -318,10 +318,10 @@ class MyHomeOpenWebNetPlatform implements DynamicPlatformPlugin {
 
     const service = accessory.getService(this.api.hap.Service.Lightbulb);
     this.refreshCharacteristic(
-      service?.getCharacteristic(this.api.hap.Characteristic.Brightness),
+      service?.getCharacteristic(this.api.hap.Characteristic.On),
     );
     this.refreshCharacteristic(
-      service?.getCharacteristic(this.api.hap.Characteristic.On),
+      service?.getCharacteristic(this.api.hap.Characteristic.Brightness),
     );
   }
 

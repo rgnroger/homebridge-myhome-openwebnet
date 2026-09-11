@@ -306,6 +306,15 @@ export class OpenWebNetClient {
         this.stop();
     }
     handleBusFrame(frame) {
+        const advancedDimmerMatch = frame.match(/^\*#1\*([0-9#]+)\*\d+\*(\d+)\*\d+##$/);
+        if (advancedDimmerMatch) {
+            const [, where, rawBrightness] = advancedDimmerMatch;
+            if (this.monitoredLights.has(where)) {
+                const brightness = Math.max(0, Math.min(100, Number(rawBrightness) - 100));
+                this.events.onDimmerState?.(where, brightness);
+            }
+            return;
+        }
         const match = frame.match(/^\*1\*(\d+)\*([0-9#]+)##$/);
         if (!match) {
             return;

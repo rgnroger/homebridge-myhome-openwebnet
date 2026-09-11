@@ -192,8 +192,8 @@ class MyHomeOpenWebNetPlatform {
         accessory.context.brightness = brightness;
         accessory.context.on = on;
         const service = accessory.getService(this.api.hap.Service.Lightbulb);
-        this.refreshCharacteristic(service?.getCharacteristic(this.api.hap.Characteristic.Brightness));
         this.refreshCharacteristic(service?.getCharacteristic(this.api.hap.Characteristic.On));
+        this.refreshCharacteristic(service?.getCharacteristic(this.api.hap.Characteristic.Brightness));
     }
     readConfiguredDevices(configKey, deviceLabel, usedAddresses) {
         const configuredDevices = this.config[configKey];
